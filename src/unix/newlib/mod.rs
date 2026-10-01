@@ -1,12 +1,19 @@
 use crate::prelude::*;
 
-pub type blkcnt_t = i32;
-pub type blksize_t = i32;
+cfg_if! {
+    if #[cfg(all(target_os = "horizon", target_arch = "aarch64"))] {
+        pub type blkcnt_t = i64;
+        pub type blksize_t = i64;
+    } else {
+        pub type blkcnt_t = i32;
+        pub type blksize_t = i32;
+    }
+}
 
 pub type clockid_t = c_ulong;
 
 cfg_if! {
-    if #[cfg(any(target_os = "espidf"))] {
+    if #[cfg(any(target_os = "espidf", all(target_os = "horizon", target_arch = "aarch64")))] {
         pub type dev_t = c_short;
         pub type ino_t = c_ushort;
         pub type off_t = c_long;
@@ -43,7 +50,13 @@ cfg_if! {
 
 pub type socklen_t = u32;
 pub type speed_t = u32;
-pub type suseconds_t = i32;
+cfg_if! {
+    if #[cfg(all(target_os = "horizon", target_arch = "aarch64"))] {
+        pub type suseconds_t = i64;
+    } else {
+        pub type suseconds_t = i32;
+    }
+}
 cfg_if! {
     if #[cfg(target_os = "espidf")] {
         pub type tcflag_t = u16;
@@ -222,6 +235,7 @@ s! {
         bits: [u32; 32],
     }
 
+    #[cfg_attr(all(target_os = "horizon", target_arch = "aarch64"), repr(align(8)))]
     pub struct pthread_attr_t {
         // Unverified
         #[cfg(not(target_os = "espidf"))]
@@ -257,12 +271,16 @@ s! {
         repr(align(4))
     )]
     #[cfg_attr(
-        any(
-            target_pointer_width = "64",
-            not(any(target_arch = "mips", target_arch = "arm", target_arch = "powerpc"))
+        all(
+            any(
+                target_pointer_width = "64",
+                not(any(target_arch = "mips", target_arch = "arm", target_arch = "powerpc"))
+            ),
+            not(all(target_os = "horizon", target_arch = "aarch64"))
         ),
         repr(align(8))
     )]
+    #[cfg_attr(all(target_os = "horizon", target_arch = "aarch64"), repr(align(4)))]
     pub struct pthread_mutex_t {
         // Unverified
         size: [u8; crate::__SIZEOF_PTHREAD_MUTEX_T],
@@ -276,12 +294,16 @@ s! {
         repr(align(4))
     )]
     #[cfg_attr(
-        any(
-            target_pointer_width = "64",
-            not(any(target_arch = "mips", target_arch = "arm", target_arch = "powerpc"))
+        all(
+            any(
+                target_pointer_width = "64",
+                not(any(target_arch = "mips", target_arch = "arm", target_arch = "powerpc"))
+            ),
+            not(all(target_os = "horizon", target_arch = "aarch64"))
         ),
         repr(align(8))
     )]
+    #[cfg_attr(all(target_os = "horizon", target_arch = "aarch64"), repr(align(4)))]
     pub struct pthread_rwlock_t {
         // Unverified
         size: [u8; crate::__SIZEOF_PTHREAD_RWLOCK_T],
@@ -294,7 +316,8 @@ s! {
             target_arch = "powerpc64",
             target_arch = "mips64",
             target_arch = "s390x",
-            target_arch = "sparc64"
+            target_arch = "sparc64",
+            all(target_os = "horizon", target_arch = "aarch64")
         ),
         repr(align(4))
     )]
@@ -305,7 +328,8 @@ s! {
             target_arch = "powerpc64",
             target_arch = "mips64",
             target_arch = "s390x",
-            target_arch = "sparc64"
+            target_arch = "sparc64",
+            all(target_os = "horizon", target_arch = "aarch64")
         )),
         repr(align(8))
     )]
@@ -320,7 +344,8 @@ s! {
         size: [u8; crate::__SIZEOF_PTHREAD_COND_T],
     }
 
-    #[repr(align(4))]
+    #[cfg_attr(not(all(target_os = "horizon", target_arch = "aarch64")), repr(align(4)))]
+    #[cfg_attr(all(target_os = "horizon", target_arch = "aarch64"), repr(align(8)))]
     pub struct pthread_condattr_t {
         // Unverified
         size: [u8; crate::__SIZEOF_PTHREAD_CONDATTR_T],
@@ -331,8 +356,13 @@ s! {
 pub const PTHREAD_MUTEX_INITIALIZER: pthread_mutex_t = pthread_mutex_t {
     size: [__PTHREAD_INITIALIZER_BYTE; __SIZEOF_PTHREAD_MUTEX_T],
 };
+#[cfg(not(all(target_os = "horizon", target_arch = "aarch64")))]
 pub const PTHREAD_COND_INITIALIZER: pthread_cond_t = pthread_cond_t {
     size: [__PTHREAD_INITIALIZER_BYTE; __SIZEOF_PTHREAD_COND_T],
+};
+#[cfg(all(target_os = "horizon", target_arch = "aarch64"))]
+pub const PTHREAD_COND_INITIALIZER: pthread_cond_t = pthread_cond_t {
+    size: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 };
 pub const PTHREAD_RWLOCK_INITIALIZER: pthread_rwlock_t = pthread_rwlock_t {
     size: [__PTHREAD_INITIALIZER_BYTE; __SIZEOF_PTHREAD_RWLOCK_T],
@@ -347,7 +377,17 @@ cfg_if! {
 }
 
 cfg_if! {
-    if #[cfg(target_os = "espidf")] {
+    if #[cfg(all(target_os = "horizon", target_arch = "aarch64"))] {
+        const __PTHREAD_INITIALIZER_BYTE: u8 = 0;
+        pub const __SIZEOF_PTHREAD_ATTR_T: usize = 24;
+        pub const __SIZEOF_PTHREAD_MUTEX_T: usize = 12;
+        pub const __SIZEOF_PTHREAD_MUTEXATTR_T: usize = 4;
+        pub const __SIZEOF_PTHREAD_COND_T: usize = 16;
+        pub const __SIZEOF_PTHREAD_CONDATTR_T: usize = 8;
+        pub const __SIZEOF_PTHREAD_RWLOCK_T: usize = 16;
+        pub const __SIZEOF_PTHREAD_RWLOCKATTR_T: usize = 0;
+        pub const __SIZEOF_PTHREAD_BARRIER_T: usize = 32;
+    } else if #[cfg(target_os = "espidf")] {
         const __PTHREAD_INITIALIZER_BYTE: u8 = 0xff;
         pub const __SIZEOF_PTHREAD_ATTR_T: usize = 32;
         pub const __SIZEOF_PTHREAD_MUTEX_T: usize = 4;
@@ -531,8 +571,10 @@ pub const O_SYNC: c_int = 8192;
 pub const O_NONBLOCK: c_int = 16384;
 
 pub const O_ACCMODE: c_int = 3;
+#[cfg(all(target_os = "horizon", target_arch = "aarch64"))]
+pub const O_DIRECTORY: c_int = 0x200000;
 cfg_if! {
-    if #[cfg(target_os = "espidf")] {
+    if #[cfg(any(target_os = "espidf", all(target_os = "horizon", target_arch = "aarch64")))] {
         pub const O_CLOEXEC: c_int = 0x40000;
     } else {
         pub const O_CLOEXEC: c_int = 0x80000;
